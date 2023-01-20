@@ -3,36 +3,74 @@
 
 {%endblock%} {%block body%}
 <div class="container">
-  <h1>Quiz</h1>
-  <ul class="list-group" id="quizbox"></ul>
-  <hr />
-  <div class="btn-group" role="group" aria-label="Basic outlined example">
-    <button
-      type="button"
-      class="btn btn-outline-primary"
-      onclick="gotoPrevQuestion()"
-    >
-      Prev
-    </button>
-    <button
-      type="button"
-      class="btn btn-outline-primary"
-      onclick="FinishQuiz()"
-    >
-      Finish
-    </button>
-    <button
-      type="button"
-      class="btn btn-outline-primary"
-      onclick="gotoNextQuestion()"
-    >
-      Next
-    </button>
+  <div class="row">
+    <h1>Quiz</h1>
+  </div>
+  <div class="row mt-3">
+    <div class="col-md-8">
+      <div class="quizbox card">
+        <ul class="list-group list-group-flush" id="quizbox"></ul>
+      </div>
+        <div class="btn-group mt-3" role="group" aria-label="Quiz controls">
+          <button
+            type="button"
+            class="btn btn-outline-primary"
+            onclick="gotoFirstQuestion()"
+          >
+            First
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline-primary"
+            onclick="gotoPrevQuestion()"
+          >
+            Prev
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline-primary"
+            onclick="FinishQuiz()"
+          >
+            Finish
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline-primary"
+            onclick="gotoNextQuestion()"
+          >
+            Next
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline-primary"
+            onclick="gotoLastQuestion()"
+          >
+            Last
+          </button>
+        </div>
+      
+      </div>
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Overview</h5>
+            <h6 class="card-subtitle mb-2 text-muted">Questions</h6>
+            <p class="card-text">
+             questions and their status, if they are attempted are shown here.
+            </p>
+            <div id="qstatus"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   <script>
     var currentQuestionIndex = 0;
     var totalquestions = 0;
     var questions = [];
+    var maxtime = 10; //in seconds
+    var stopquiz = false;
+
     // get questions using fetch
     // send questions back to python server
     function renderquestions() {
@@ -40,29 +78,100 @@
       var ele = document.querySelector("#quizbox");
       ele.innerHTML = "";
       var question = questions[currentQuestionIndex];
-      ele.innerHTML += `<li class="list-group-item active">${question["question"]}</li>`;
-      question["incorrectAnswers"].map((item) => {
-        ele.innerHTML += `<li class="list-group-item"><input type="radio" name="q${currentQuestionIndex}"/> ${item}</li>`;
+      var correctAnswer = question["correctAnswer"];
+      ele.innerHTML += `<li class="list-group-item active">${currentQuestionIndex + 1}. ${question["question"]}</li>`;
+      var attempted = question['attemptedAnswer'];
+      question['options'].map((item, optionindex) => { 
+        var optionHTML = `<li class="list-group-item  ${item==correctAnswer&&stopquiz==true?'bg-success':''}"><div class="form-check">
+          <input class="form-check-input" onclick="questionattempt(${currentQuestionIndex},${optionindex})" type="radio" name="q${currentQuestionIndex}" id="q${currentQuestionIndex}${optionindex}" ${(optionindex==attempted)?"checked":""} ${stopquiz==true?"disabled":""}>
+          <label class="form-check-label" for="q${currentQuestionIndex}${optionindex}">
+            ${item}
+          </label>
+        </div></li>`;
+        ele.innerHTML += optionHTML;
       });
-      ele.innerHTML += `<li class="list-group-item"><input type="radio" name="q${currentQuestionIndex}"/> ${question["correctAnswer"]}</li>`;
+      showstatus();
+    }
+
+    function questionattempt(qindex,optionindex){
+      questions[qindex]['attempted']=true;
+      questions[qindex]['attemptedAnswer']=optionindex;
+      showstatus();
+    }
+
+    function gotoFirstQuestion() {
+      currentQuestionIndex = 0;
+      renderquestions();
+    }
+
+    function gotoLastQuestion() {
+      currentQuestionIndex = totalquestions - 1;
+      renderquestions();
     }
 
     function gotoPrevQuestion() {
-      if (currentQuestionIndex > 0) currentQuestionIndex -= 1;
-      renderquestions();
+      if (currentQuestionIndex > 0) {
+        currentQuestionIndex -= 1;
+        renderquestions();
+      }
     }
 
     function gotoNextQuestion() {
-      if (currentQuestionIndex <= totalquestions) currentQuestionIndex += 1;
-      renderquestions();
+      if (currentQuestionIndex < totalquestions - 1) {
+        currentQuestionIndex += 1;
+        renderquestions();
+      }
     }
 
+    function gotoQuestion(qindex){
+      currentQuestionIndex = qindex;
+        renderquestions();
+        
+    }
+
+    function showstatus(){
+      var ele = document.querySelector("#qstatus");
+      ele.innerHTML = "";
+      questions.map((question, qindex)=>{
+        var qclass = question['attempted']==true?"primary":"secondary";
+        var btn = `<button type="button" onclick="gotoQuestion(${qindex})" class="btn btn-sm m-2 btn-outline-${qclass} ${currentQuestionIndex==qindex?"bg-info":""}">Q${qindex+1}.</button>`;
+        ele.innerHTML += btn;
+      });
+    }
+
+    function FinishQuiz(){
+      var headers = {
+        "method":"POST", 
+        "headers":{
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        "body": JSON.stringify(questions)
+      };
+
+      fetch('/quiz',headers).then(res=>res.json()).then(data=>{
+        alert(`You scored ${data["score"]}`);
+        stopquiz  = true;
+        renderquestions();
+      });
+    }
+    
     url = "https://the-trivia-api.com/api/questions";
     fetch(url)
       .then((res) => res.json())
       .then((data) => {
         questions = data;
-        renderquestions(data);
+        questions.map((question,qindex)=>{
+          var options = [
+            ...question["incorrectAnswers"],
+            question["correctAnswer"],
+          ];
+          options = options.sort(() => Math.random() - 0.5);
+          questions[qindex]['options'] = options;
+        });
+        
+        renderquestions();
+        showstatus();
       });
   </script>
 </div>
