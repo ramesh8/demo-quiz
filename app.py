@@ -25,14 +25,17 @@ def quiz_submit():
     questions = request.json
     
     score = 0
+    attempted = 0
     for question in questions:
         if "attempted" in question:
+            attempted += 1
             attemptedOption = question["options"][question["attemptedAnswer"]]
             if attemptedOption == question["correctAnswer"]:
                 score += 1
 
     userid = 1
     quiz = {
+        "attempted":attempted,
         "score":score,
         "timestamp": datetime.datetime.now(),
         "userid":userid
